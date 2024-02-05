@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "monitoring_service": {
+      "commandName": "Project"
+    },
+    "Docker": {
+      "commandName": "Docker"
+    }
+  }
+}

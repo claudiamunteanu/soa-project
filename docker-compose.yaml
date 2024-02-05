@@ -1,0 +1,193 @@
+version: '3.4'
+services:
+  store-host:
+    image: store-host
+    ports:
+      - "3000:3000"
+    container_name: store-host
+    stdin_open: true    
+    networks:
+      - services-network
+  store-product-catalog:
+    image: store-product-catalog
+    ports:
+      - "3001:3001"
+    container_name: store-product-catalog
+    stdin_open: true    
+    networks:
+      - services-network
+  store-cart:
+    image: store-cart
+    ports:
+      - "3002:3002"
+    container_name: store-cart
+    stdin_open: true    
+    networks:
+      - services-network
+  store-auth:
+    image: store-auth
+    ports:
+      - "3003:3003"
+    container_name: store-auth
+    stdin_open: true    
+    networks:
+      - services-network
+  store-monitoring-service:
+    image: store-monitoring-service
+    container_name: store-monitoring-service
+    depends_on:
+      - kafka
+    networks:
+      - services-network
+    stdin_open: true
+  store-identity_1:
+    image: store-identity
+    container_name: store-identity_1
+    depends_on:
+      - rabbitmq
+      - db
+    networks:
+      - services-network
+    environment:
+      QUEUE_NAME: queue_1
+    stdin_open: true
+  store-identity_2:
+    image: store-identity
+    container_name: store-identity_2
+    depends_on:
+      - rabbitmq
+      - db
+    networks:
+      - services-network
+    environment:
+      QUEUE_NAME: queue_2
+    stdin_open: true
+  store-server_1:
+    image: store-server
+    ports:
+      - "5052:80"
+    container_name: store-server_1
+    depends_on:
+      - rabbitmq
+      - db
+      - kafka
+    networks:
+      - services-network
+    environment:
+      QUEUE_NAME: queue_1
+      REPLY_QUEUE_NAME: reply_queue_1
+      ASPNETCORE_ENVIRONMENT: Development
+    volumes:
+      - $APPDATA/Microsoft/UserSecrets/${USER_SECRETS_ID}:/root/.microsoft/usersecrets/${USER_SECRETS_ID}
+    stdin_open: true
+  store-server_2:
+    image: store-server
+    container_name: store-server_2
+    depends_on:
+      - rabbitmq
+      - db
+      - kafka
+    networks:
+      - services-network
+    environment:
+      QUEUE_NAME: queue_2
+      REPLY_QUEUE_NAME: reply_queue_2
+      ASPNETCORE_ENVIRONMENT: Development
+    volumes:
+      - $APPDATA/Microsoft/UserSecrets/${USER_SECRETS_ID}:/root/.microsoft/usersecrets/${USER_SECRETS_ID}
+    stdin_open: true
+  store-nginx:
+    image: store-nginx
+    ports:
+      - "80:80"
+    container_name: store-nginx
+    stdin_open: true    
+    networks:
+      - services-network
+  rabbitmq: # login guest:guest
+    image: rabbitmq:3-management
+    labels:
+      NAME: "rabbitmq"
+    container_name: rabbitmq
+    networks:
+      - services-network
+    ports:
+      - "4369:4369"
+      - "5671:5671"
+      - "5672:5672"
+      - "25672:25672"
+      - "15671:15671"
+      - "15672:15672"
+    environment:
+      - RABBITMQ_DEFAULT_USER=guest
+      - RABBITMQ_DEFAULT_PASS=guest
+  db:
+    image: "mcr.microsoft.com/mssql/server:2022-latest"
+    ports:
+      - "1433:1433"
+    environment:
+      MSSQL_SA_PASSWORD: "Password69!"
+      ACCEPT_EULA: "Y"
+    networks:
+      - services-network
+    volumes:
+      - ./data:/var/opt/mssql/data
+  zookeeper:
+    image: confluentinc/cp-zookeeper:6.2.0
+    hostname: zookeeper
+    container_name: zookeeper
+    ports:
+      - "22181:2181"
+    networks:
+      - services-network
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+  kafka:
+    image: confluentinc/cp-kafka:6.2.0
+    hostname: kafka
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "29092:29092"
+      - "9092:9092"
+      - "9101:9101"
+    networks:
+      - services-network
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      # KAFKA_LISTENERS: PLAINTEXT://localhost:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      # KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_JMX_PORT: 9101
+      KAFKA_JMX_HOSTNAME: localhost
+  init-kafka:
+    image: confluentinc/cp-kafka:6.2.0
+    depends_on:
+      - kafka
+    entrypoint: [ '/bin/sh', '-c' ]
+    command: |
+      "
+      # blocks until kafka is reachable
+      kafka-topics --bootstrap-server kafka:29092 --list
+
+      echo -e 'Creating kafka topics'
+      kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --topic monitoring
+
+      echo -e 'Successfully created the following topics:'
+      kafka-topics --bootstrap-server kafka:29092 --list
+      "
+    networks:
+      - services-network
+networks:
+  services-network:
+    driver: bridge

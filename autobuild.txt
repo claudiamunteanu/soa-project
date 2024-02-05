@@ -1,0 +1,10 @@
+docker build -t store-monitoring-service -f ./monitoring_service/Dockerfile ./monitoring_service
+docker build -t store-identity -f ./identity_provider_project_cmunteanu/Dockerfile ./identity_provider_project_cmunteanu
+docker build -t store-server -f ./server_cmunteanu/Dockerfile ./server_cmunteanu
+docker build -t store-product-catalog ./host/product-catalog
+docker build -t store-cart ./host/shopping-cart
+docker build -t store-auth ./host/login
+docker build -t store-host ./host
+docker build -t store-nginx -f ./host/Dockerfile.nginx ./host
+
+docker-compose --env-file .my-env up -d
